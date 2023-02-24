@@ -23,6 +23,8 @@ import androidx.work.WorkManager
 import androidx.work.Worker
 import androidx.work.WorkerFactory
 import androidx.work.WorkerParameters
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * Worker job to refresh titles from the network while the app is in the background.
@@ -39,9 +41,22 @@ class RefreshMainDataWork(context: Context, params: WorkerParameters, private va
      * WorkManager will call this method from a background thread. It may be called even
      * after our app has been terminated by the operating system, in which case [WorkManager] will
      * start just enough to run this [Worker].
+     *
+     * Note that CoroutineWorker.doWork() is a suspending function. Unlike the simpler Worker class,
+     * this code does NOT run on the Executor specified in your WorkManager configuration,
+     * but instead uses Dispatchers.Default. You can switch to other dispatchers by using withContext().
      */
     override suspend fun doWork(): Result {
-        return Result.success()         // TODO: Use coroutines from WorkManager
+        val titleDao = getDatabase(applicationContext).titleDao
+        val repository = TitleRepository(network, titleDao)
+        return withContext(Dispatchers.IO){
+            try {
+                repository.refreshTitle()
+               Result.success()
+            }catch (error: TitleRefreshError){
+                Result.failure()
+            }
+        }
     }
 
     class Factory(val network: MainNetwork = getNetworkService()) : WorkerFactory() {
